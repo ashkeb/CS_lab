@@ -1,0 +1,110 @@
+Lab Program 2: Acquisition of data: to learn the methods to acquire/gain access to data using virus/malware file.
+
+General Steps
+1. Prepare a workspace and install tools (steghide, zip, clamav). 
+2. Create benign "victim" files (sample secret.txt and the EICAR test string) and verify them. 
+3. Simulate a malware run: run a bash script that copies the secret, zips it with a password, and stages it for exfiltration. 
+4. Hide the encrypted payload inside an image using steghide. 
+5. Conceal the stego-image (e.g., move/rename to a hidden location), then extract and decrypt the payload to recover the secret. 
+
+1) Prepare workspace & install tools
+mkdir -p ~/acq_demo && cd ~/acq_demo
+sudo apt update
+sudo apt install -y steghide zip clamav
+
+
+2) Create benign victim files and verify workspace
+mkdir -p ~/acq_demo/victim_docs
+
+echo "this is a test secret." > ~/acq_demo/victim_docs/secret.txt
+# harmless AV test string (EICAR)
+echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > ~/acq_demo/eicar.com.txt
+
+# verify workspace and view the secret
+ls -l  ~/acq_demo
+cat  ~/acq_demo/victim_docs/secret.txt 
+Output: this is a test secret
+
+
+3) Simulate "infection" - save the malware script and run it (debug run included)
+Save this exact content to ~/acq_demo/simulate_malware.sh (file only - do not include the run commands inside the file):
+nano simulate_malware.sh
+#!/bin/bash
+# simulate_malware (robust, debug-friendly) - local-only demo
+set -euo pipefail
+echo "[*] script start: $(date)"
+TMPDIR="$(mktemp -d /tmp/exfil.XXXXXX)" || { echo "[!] mktemp failed" >&2; exit 1; }
+echo "[*] TMPDIR=${TMPDIR}"
+if [ -z "${TMPDIR}" ] || [ ! -d "${TMPDIR}" ]; then
+  echo "[!] Failed to create temp dir. TMPDIR='${TMPDIR}'" >&2
+  exit 1
+fi
+trap 'echo "[*] cleaning ${TMPDIR}"; rm -rf "${TMPDIR}"' EXIT
+SRC="${HOME}/acq_demo/victim_docs/secret.txt"
+if [ ! -f "${SRC}" ]; then
+  echo "[!] Source file missing: ${SRC}" >&2
+  exit 1
+fi
+echo "[*] Found source: ${SRC}"
+cp "${SRC}" "${TMPDIR}/secret.txt"
+echo "[*] copied secret to ${TMPDIR}/secret.txt"
+# create encrypted zip (password = pass123)
+zip -j -P pass123 "${TMPDIR}/payload.zip" "${TMPDIR}/secret.txt"
+echo "[*] created zip: ${TMPDIR}/payload.zip"
+# copy payload out to stable demo location
+mkdir -p /tmp/exfil
+cp "${TMPDIR}/payload.zip" /tmp/exfil/payload.zip
+echo "[*] copied payload to /tmp/exfil/payload.zip"
+ls -l /tmp/exfil || echo "[!] cannot list /tmp/exfil"
+echo "[*] script end: $(date)"
+
+
+Give executable permission
+chmod +x ~/acq_demo/simulate_malware.sh
+debug run (traces each executed line):
+bash -x ~/acq_demo/simulate_malware.sh
+
+4) Hide the encrypted payload in an image (steganography) - commands only
+Place a JPEG at ~/acq_demo/cover1.jpg before running these commands (or copy a system image into place):
+# verify files
+ls -l /tmp/exfil/payload.zip
+ls -l ~/acq_demo/cover1.jpg
+
+# embed and inspect
+steghide embed -cf ~/acq_demo/cover1.jpg -ef /tmp/exfil/payload.zip -p demo-pass
+steghide info ~/acq_demo/cover1.jpg
+type y and give pass phrase demo-pass
+
+5) Conceal stego-image and demonstrate extraction (local)
+mkdir -p ~/.hidden_store
+mv ~/acq_demo/cover1.jpg ~/.hidden_store/.cover1.jpg
+ls  -la  ~/.hidden_store
+
+# extract embedded zip (steghide password 'demo-pass')
+steghide extract -sf ~/.hidden_store/.cover1.jpg -p demo-pass -xf /tmp/recovered_payload.zip
+
+# unzip with payload password 'pass123' and show the secret
+unzip -P pass123 /tmp/recovered_payload.zip -d /tmp/recovered_payload
+cat /tmp/recovered_payload/secret.txt
+
+
+Viva Questions:
+1.	How does a reverse TCP payload work in malware?
+2.	What are the common techniques used to obfuscate malware?
+3.	What are the ethical and legal implications of creating malware?
+4.	How can a system be secured against malware attacks?
+5.	What is the purpose of password-protecting malicious files during experiments?
+6.	What is a reverse shell, and how does it work?
+7.	What are some common issues faced during reverse shell connections?
+8.	How do you verify that a reverse shell is active?
+9.	What are the risks of using reverse shells in a live network?
+10.	Explain the role of firewalls and antivirus software in blocking reverse shells.
+11.	What are the ethical considerations of conducting experiments involving malware?
+12.	How do you ensure that malware created in the lab doesn't harm real-world systems?
+13.	What are the consequences of using malware outside a controlled environment?
+14.	Why is it important to isolate the lab environment during these experiments?
+15.	If the payload doesn't execute on the target machine, how would you troubleshoot?
+16.	What would you do if the reverse connection fails?
+17.	If the target has a firewall blocking outgoing connections, how would you proceed?
+18.	How would you secure your system against the same vulnerabilities you exploited?
+
